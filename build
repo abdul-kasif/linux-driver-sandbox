@@ -1,0 +1,56 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+  echo "Error: No project folder specified."
+  echo "Usage: ./build.sh <folder_name>"
+  exit 1
+fi
+
+PROJECT_DIR="$1"
+SOURCE_PATH=~/host-workspace/"$PROJECT_DIR"
+
+if [ ! -d "$SOURCE_PATH" ]; then
+  echo "Error: Project directory '$SOURCE_PATH' does not exist!"
+  exit 1
+fi
+
+echo "--- Syncing '$PROJECT_DIR' to RAM ---"
+rsync -rlt --delete "$SOURCE_PATH"/ ~/ram-build/
+echo -e " Syncing completed! \n"
+
+cd ~/ram-build || {
+  echo "Failed to enter RAM build directory"
+  exit 1
+}
+
+echo "--- Compiling '$PROJECT_DIR' Module in RAM ---"
+make -j"$(nproc)"
+
+if [ $? -eq 0 ]; then
+  echo -e "\n Compilation successful!"
+  read -p "Do you want to insert the module? (y/n): " choice
+
+  if [ "$choice" = "y" ]; then
+    KO_FILE=$(ls *.ko 2>/dev/null | head -n 1)
+
+    if [ -z "$KO_FILE" ]; then
+      echo "Error: No .ko file found after compilation!"
+      exit 1
+    fi
+
+    MODULE=$(basename "$KO_FILE" .ko)
+
+    echo "Inserting $KO_FILE..."
+    sudo insmod "$KO_FILE"
+
+    echo "--- Kernel Logs ---"
+    sudo dmesg | tail -n 10
+    echo "-----------------------"
+
+    read -p "Press Enter to remove the module..."
+    sudo rmmod "$MODULE"
+    echo "Module '$MODULE' removed safely."
+  fi
+else
+  echo -e "\n Compilation failed! Check the errors above."
+fi
