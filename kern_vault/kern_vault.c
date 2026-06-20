@@ -4,13 +4,17 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/string.h>
 #include <linux/types.h>
+#include <linux/uaccess.h>
+
+#define BUFFER_SIZE 128
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Abdul Kasif <abdulkasif.ra@gmail.com>");
 MODULE_DESCRIPTION("Write and read secret message in kernel");
 
-static char secret_message[128];
+static char secret_message[BUFFER_SIZE];
 
 static atomic_t message_counter = ATOMIC_INIT(0);
 
@@ -23,8 +27,24 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
 static ssize_t kern_vault_proc_write(struct file *file,
                                      const char __user *user_buf, size_t count,
                                      loff_t *ppos) {
-  pr_info("kern_vault: inside kern_vault_proc_write.\n");
-  return -1;
+  size_t bytes_to_copy = (count < BUFFER_SIZE - 1) ? count : BUFFER_SIZE - 1;
+  unsigned long uncopied;
+
+  memset(secret_message, 0, BUFFER_SIZE);
+
+  uncopied = copy_from_user(secret_message, user_buf, bytes_to_copy);
+
+  secret_message[bytes_to_copy] = '\0';
+
+  if (uncopied == 0) {
+    pr_info("kern_vault: Received %zu bytes from userspace: %s\n",
+            bytes_to_copy, secret_message);
+
+    return count;
+  } else {
+    pr_err("kern_vault: Failed to copy %lu bytes from userspace\n", uncopied);
+    return -EFAULT;
+  }
 }
 
 static struct proc_dir_entry *kern_vault_dir_entry;
