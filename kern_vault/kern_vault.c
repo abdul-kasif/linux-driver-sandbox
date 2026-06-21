@@ -20,8 +20,35 @@ static atomic_t message_counter = ATOMIC_INIT(0);
 
 static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
                                     size_t count, loff_t *ppos) {
-  pr_info("kern_vault: inside kern_vault_proc_read.\n");
-  return 0;
+  size_t message_len = strlen(secret_message);
+  unsigned long uncopied_bytes;
+
+  if (*ppos == 0) {
+    atomic_inc(&message_counter);
+    pr_info("kern_vault: Vault accessed. Total reads: %d\n",
+            atomic_read(&message_counter));
+  }
+
+  if (*ppos >= message_len) {
+    return 0;
+  }
+
+  if (count > message_len - *ppos) {
+    count = message_len - *ppos;
+  }
+
+  uncopied_bytes = copy_to_user(user_buf, secret_message + *ppos, count);
+
+  if (uncopied_bytes != 0) {
+    pr_err("Failed to copy %lu bytes to user space\n", uncopied_bytes);
+    return -EFAULT;
+  }
+
+  *ppos += count;
+
+  pr_info("kern_vault: Read %zu bytes from kernel: %s", count, secret_message);
+
+  return count;
 }
 
 static ssize_t kern_vault_proc_write(struct file *file,
