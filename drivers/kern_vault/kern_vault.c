@@ -64,23 +64,26 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
 static ssize_t kern_vault_proc_write(struct file *file,
                                      const char __user *user_buf, size_t count,
                                      loff_t *ppos) {
+  char temp_buf[BUFFER_SIZE];
   size_t bytes_to_copy = (count < BUFFER_SIZE - 1) ? count : BUFFER_SIZE - 1;
   unsigned long uncopied;
 
-  mutex_lock(&vault_lock);
+  memset(temp_buf, 0, BUFFER_SIZE);
 
-  memset(secret_message, 0, BUFFER_SIZE);
-
-  uncopied = copy_from_user(secret_message, user_buf, bytes_to_copy);
-
-  secret_message[bytes_to_copy] = '\0';
-
-  mutex_unlock(&vault_lock);
+  uncopied = copy_from_user(temp_buf, user_buf, bytes_to_copy);
 
   if (uncopied != 0) {
     pr_err("kern_vault: Failed to copy %lu bytes from userspace\n", uncopied);
     return -EFAULT;
   }
+
+  temp_buf[bytes_to_copy] = '\0';
+
+  mutex_lock(&vault_lock);
+
+  memcpy(secret_message, temp_buf, bytes_to_copy + 1);
+
+  mutex_unlock(&vault_lock);
 
   pr_info("kern_vault: Received %zu bytes from userspace\n", bytes_to_copy);
 
