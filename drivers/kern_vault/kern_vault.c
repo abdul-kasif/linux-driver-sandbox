@@ -23,6 +23,7 @@ static atomic_t message_counter = ATOMIC_INIT(0);
 
 static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
                                     size_t count, loff_t *ppos) {
+  char temp_buf[BUFFER_SIZE];
   size_t message_len;
   unsigned long uncopied_bytes;
 
@@ -34,10 +35,12 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
 
   mutex_lock(&vault_lock);
 
-  message_len = strlen(secret_message);
+  strscpy(temp_buf, secret_message, BUFFER_SIZE);
 
+  mutex_unlock(&vault_lock);
+
+  message_len = strlen(temp_buf);
   if (*ppos >= message_len) {
-    mutex_unlock(&vault_lock);
     return 0;
   }
 
@@ -45,9 +48,7 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
     count = message_len - *ppos;
   }
 
-  uncopied_bytes = copy_to_user(user_buf, secret_message + *ppos, count);
-
-  mutex_unlock(&vault_lock);
+  uncopied_bytes = copy_to_user(user_buf, temp_buf + *ppos, count);
 
   if (uncopied_bytes != 0) {
     pr_err("Failed to copy %lu bytes to user space\n", uncopied_bytes);
@@ -81,7 +82,7 @@ static ssize_t kern_vault_proc_write(struct file *file,
 
   mutex_lock(&vault_lock);
 
-  memcpy(secret_message, temp_buf, bytes_to_copy + 1);
+  strscpy(secret_message, temp_buf, BUFFER_SIZE);
 
   mutex_unlock(&vault_lock);
 
