@@ -129,7 +129,8 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
  *
  * Existing vault message is replaced.
  *
- * Context: Process contexc. Can sleep.
+ * Context: Process context. Can sleep.
+ *
  * Return:
  * Number of bytes consumed on success.
  * -EFAULT if copying from userspace fails.
