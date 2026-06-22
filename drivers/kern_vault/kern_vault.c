@@ -2,6 +2,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
 #include <linux/string.h>
@@ -14,13 +15,15 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Abdul Kasif <abdulkasif.ra@gmail.com>");
 MODULE_DESCRIPTION("Write and read secret message in kernel");
 
+DEFINE_MUTEX(vault_lock);
+
 static char secret_message[BUFFER_SIZE];
 
 static atomic_t message_counter = ATOMIC_INIT(0);
 
 static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
                                     size_t count, loff_t *ppos) {
-  size_t message_len = strlen(secret_message);
+  size_t message_len;
   unsigned long uncopied_bytes;
 
   if (*ppos == 0) {
@@ -29,7 +32,12 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
             atomic_read(&message_counter));
   }
 
+  mutex_lock(&vault_lock);
+
+  message_len = strlen(secret_message);
+
   if (*ppos >= message_len) {
+    mutex_unlock(&vault_lock);
     return 0;
   }
 
@@ -39,6 +47,8 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
 
   uncopied_bytes = copy_to_user(user_buf, secret_message + *ppos, count);
 
+  mutex_unlock(&vault_lock);
+
   if (uncopied_bytes != 0) {
     pr_err("Failed to copy %lu bytes to user space\n", uncopied_bytes);
     return -EFAULT;
@@ -46,7 +56,7 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
 
   *ppos += count;
 
-  pr_info("kern_vault: Read %zu bytes from kernel: %s", count, secret_message);
+  pr_info("kern_vault: Read %zu bytes from kernel\n", count);
 
   return count;
 }
@@ -57,21 +67,24 @@ static ssize_t kern_vault_proc_write(struct file *file,
   size_t bytes_to_copy = (count < BUFFER_SIZE - 1) ? count : BUFFER_SIZE - 1;
   unsigned long uncopied;
 
+  mutex_lock(&vault_lock);
+
   memset(secret_message, 0, BUFFER_SIZE);
 
   uncopied = copy_from_user(secret_message, user_buf, bytes_to_copy);
 
   secret_message[bytes_to_copy] = '\0';
 
-  if (uncopied == 0) {
-    pr_info("kern_vault: Received %zu bytes from userspace: %s\n",
-            bytes_to_copy, secret_message);
+  mutex_unlock(&vault_lock);
 
-    return count;
-  } else {
+  if (uncopied != 0) {
     pr_err("kern_vault: Failed to copy %lu bytes from userspace\n", uncopied);
     return -EFAULT;
   }
+
+  pr_info("kern_vault: Received %zu bytes from userspace\n", bytes_to_copy);
+
+  return count;
 }
 
 static struct proc_dir_entry *kern_vault_dir_entry;
@@ -85,7 +98,7 @@ static int __init kern_vault_init(void) {
   pr_info("kern_vault init: entry\n");
 
   kern_vault_dir_entry =
-      proc_create("kern_vault", 0444, NULL, &kern_vault_proc_ops);
+      proc_create("kern_vault", 0666, NULL, &kern_vault_proc_ops);
 
   if (kern_vault_dir_entry == NULL) {
     pr_err("Failed to create /proc/kern_vault entry\n");
