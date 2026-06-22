@@ -131,7 +131,7 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
  *
  * Context: Process contexc. Can sleep.
  * Return:
- * Number of bytes stored on success.
+ * Number of bytes consumed on success.
  * -EFAULT if copying from userspace fails.
  */
 static ssize_t kern_vault_proc_write(struct file *file,
@@ -158,9 +158,9 @@ static ssize_t kern_vault_proc_write(struct file *file,
 
   mutex_unlock(&vault_lock);
 
-  pr_info("kern_vault: Received %zu bytes from userspace\n", bytes_to_copy);
+  *ppos += bytes_to_copy;
 
-  return count;
+  return bytes_to_copy;
 }
 
 static struct proc_dir_entry *kern_vault_dir_entry;
