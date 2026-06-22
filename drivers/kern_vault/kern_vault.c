@@ -1,3 +1,23 @@
+/*
+ * kern_vault.c - Simple procfs-based message vault
+ *
+ * This module creates a /proc/kern_vault entry that allows
+ * userspace applications to store and retrieve a single message.
+ *
+ * Features:
+ *    - Read/Write access through procfs
+ *    - Message buffer protected by mutex
+ *    - Read access statistics using atomic counter
+ *
+ * Limitations:
+ *    - Stores only one message
+ *    - Message is not persistent
+ *    - Maximum message size is BUFFER_SIZE - 1 bytes
+ *
+ * Author: Abdul Kasif <abdulkasif.ra@gmail.com>
+ * Licence: GPL
+ */
+
 #include <linux/atomic.h>
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -15,12 +35,47 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Abdul Kasif <abdulkasif.ra@gmail.com>");
 MODULE_DESCRIPTION("Write and read secret message in kernel");
 
+/*
+ * Protects access to the shared message buffer.
+ */
 DEFINE_MUTEX(vault_lock);
 
+/*
+ * Stores the current vault message.
+ *
+ * Protected by vault_lock
+ */
 static char secret_message[BUFFER_SIZE];
 
+/*
+ * Counts the number of read sessions.
+ *
+ * The counter is incremented only when a read starts
+ * from offset zero.
+ */
 static atomic_t message_counter = ATOMIC_INIT(0);
 
+/**
+ * kern_vault_proc_read - Read message from the vault
+ * @file: procfs file structure
+ * @user_buf: userspace destination buffer
+ * @count: requested bytes count
+ * @ppos: file position pointer
+ *
+ * Creates a temporary snapshot of the stored message while
+ * holding vault_lock. The snapshot copied to userspace after
+ * the mutex is released to minimize lock hold time.
+ *
+ * The read counter is incremented only when a new read
+ * session begins ( if *ppos == 0 ).
+ *
+ * Context: Process context. Can sleep.
+ *
+ * Return:
+ * Number of bytes copied on success.
+ * 0 when end-of-file is reached.
+ * -EFAULT if copying to userspace fails.
+ */
 static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
                                     size_t count, loff_t *ppos) {
   char temp_buf[BUFFER_SIZE];
@@ -62,6 +117,23 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
   return count;
 }
 
+/**
+ * kern_vault_proc_write - Store a new message in the vault
+ * @file: procfs file structure
+ * @user_buf: userspace source buffer
+ * @count: supplied bytes count
+ * @ppos: file position pointer
+ *
+ * Copies userspace data into a temporary buffer and then
+ * updates the shared message buffer while holding vault_lock.
+ *
+ * Existing vault message is replaced.
+ *
+ * Context: Process contexc. Can sleep.
+ * Return:
+ * Number of bytes stored on success.
+ * -EFAULT if copying from userspace fails.
+ */
 static ssize_t kern_vault_proc_write(struct file *file,
                                      const char __user *user_buf, size_t count,
                                      loff_t *ppos) {
@@ -98,6 +170,16 @@ static const struct proc_ops kern_vault_proc_ops = {
     .proc_write = kern_vault_proc_write,
 };
 
+/**
+ * kern_vault_init - Initialize module resources
+ *
+ * Creates the /proc/kern_vault entry and prepares the module
+ * for use.
+ *
+ * Return:
+ * 0 on success.
+ * -ENOMEM when procfs entry creation fails.
+ */
 static int __init kern_vault_init(void) {
   pr_info("kern_vault init: entry\n");
 
@@ -114,6 +196,12 @@ static int __init kern_vault_init(void) {
   return 0;
 }
 
+/**
+ * kern_vault_exit - Cleanup module resources
+ *
+ * Removes the procfs entry and release resources associated
+ * with the module.
+ */
 static void __exit kern_vault_exit(void) {
 
   pr_info("kern_vault exit: entry\n");
