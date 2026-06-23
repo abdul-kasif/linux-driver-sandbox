@@ -112,8 +112,6 @@ static ssize_t kern_vault_proc_read(struct file *file, char __user *user_buf,
 
   *ppos += count;
 
-  pr_info("kern_vault: Read %zu bytes from kernel\n", count);
-
   return count;
 }
 
@@ -182,7 +180,6 @@ static const struct proc_ops kern_vault_proc_ops = {
  * -ENOMEM when procfs entry creation fails.
  */
 static int __init kern_vault_init(void) {
-  pr_info("kern_vault init: entry\n");
 
   kern_vault_dir_entry =
       proc_create("kern_vault", 0644, NULL, &kern_vault_proc_ops);
@@ -192,7 +189,7 @@ static int __init kern_vault_init(void) {
     return -ENOMEM;
   }
 
-  pr_info("kern_vault init: exit\n");
+  pr_info("kern_vault initialized\n");
 
   return 0;
 }
@@ -205,13 +202,11 @@ static int __init kern_vault_init(void) {
  */
 static void __exit kern_vault_exit(void) {
 
-  pr_info("kern_vault exit: entry\n");
-
   if (kern_vault_dir_entry) {
     proc_remove(kern_vault_dir_entry);
   }
 
-  pr_info("kern_vault exit: exit\n");
+  pr_info("kern_vault removed\n");
 }
 
 module_init(kern_vault_init);
