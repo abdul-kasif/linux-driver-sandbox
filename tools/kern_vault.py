@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+kern_vault.py - Userspace companion tool for the kern_vault driver
+
+This script provides a clean command-line interface to read and write
+messages to /proc/kern_vault, handling basic errors such as missing
+root permissions or an unloaded kernel module.
+"""
 
 import argparse
 
