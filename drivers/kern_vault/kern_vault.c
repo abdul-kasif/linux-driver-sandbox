@@ -185,7 +185,7 @@ static int __init kern_vault_init(void) {
   pr_info("kern_vault init: entry\n");
 
   kern_vault_dir_entry =
-      proc_create("kern_vault", 0666, NULL, &kern_vault_proc_ops);
+      proc_create("kern_vault", 0644, NULL, &kern_vault_proc_ops);
 
   if (kern_vault_dir_entry == NULL) {
     pr_err("Failed to create /proc/kern_vault entry\n");
