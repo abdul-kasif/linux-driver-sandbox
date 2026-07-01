@@ -1,6 +1,8 @@
-#include "linux/cred.h"
+#include <linux/cred.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/ktime.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
@@ -8,6 +10,7 @@
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <linux/seq_file.h>
+#include <linux/timekeeping.h>
 #include <linux/types.h>
 
 MODULE_LICENSE("GPL");
@@ -18,6 +21,8 @@ MODULE_DESCRIPTION("Display every running tasks currently managed by the CPU");
 #define KM_SUMMARY_NAME "summary"
 #define KM_PROCESS_LIST_NAME "process_list"
 
+static u64 module_load_time_ns;
+
 static struct proc_dir_entry *monitor_dir;
 static struct proc_dir_entry *summary_entry;
 static struct proc_dir_entry *process_list_entry;
@@ -26,13 +31,27 @@ static int km_summary_show(struct seq_file *m, void *v) {
   struct task_struct *task;
   unsigned int total_tasks = 0;
 
+  u64 current_time_ns;
+  u64 elasped_ns;
+  u64 total_seconds;
+  unsigned int hours, minutes, seconds;
+
+  current_time_ns = ktime_get_boottime_ns();
+
+  elasped_ns = current_time_ns - module_load_time_ns;
+
+  total_seconds = div_u64(elasped_ns, 1000000000ULL);
+
+  minutes = div_u64_rem(total_seconds, 60, &seconds);
+  hours = div_u64_rem(minutes, 60, &minutes);
+
   rcu_read_lock();
-
   for_each_process(task) { total_tasks++; }
-
   rcu_read_unlock();
 
-  seq_printf(m, "Total runnning processes: %u\n", total_tasks);
+  seq_printf(m, "Total running processes: %u\n", total_tasks);
+  seq_printf(m, "Module Uptime: %02u:%02u:%02u\n", hours, minutes, seconds);
+
   return 0;
 }
 
@@ -109,6 +128,8 @@ static const struct proc_ops km_process_list_fops = {
     .proc_release = seq_release};
 
 static int __init km_init(void) {
+
+  module_load_time_ns = ktime_get_boottime_ns();
 
   monitor_dir = proc_mkdir(KM_DIR_NAME, NULL);
 
