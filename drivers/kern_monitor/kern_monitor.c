@@ -87,8 +87,8 @@ static int process_list_seq_show(struct seq_file *m, void *v) {
 
   struct task_struct *task = (struct task_struct *)v;
 
-  seq_printf(m, "PID: %-6d | State: %-4u | Name: %s\n", task->pid,
-             task->__state, task->comm);
+  seq_printf(m, "PID: %-6d | State: %-4c | Name: %s\n", task->pid,
+             task_state_to_char(task), task->comm);
   return 0;
 }
 
